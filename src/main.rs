@@ -80,10 +80,9 @@ fn list_tasks(conn: &Connection) -> Result<(), Box<dyn Error>> {
     let mut stmt = conn.prepare("SELECT id, task, created_at FROM tasks")?;
     let task_iter = stmt.query_map([], |row| {
         Ok(format!(
-            "{}. {} - {}",
+            "{}. {}",
             row.get::<usize, i32>(0)?,
-            row.get::<usize, String>(1)?,
-            row.get::<usize, String>(2)?
+            row.get::<usize, String>(1)?
         ))
     })?;
 
