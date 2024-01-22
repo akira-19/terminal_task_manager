@@ -2,6 +2,11 @@
 
 This is a super simple task manager working in the terminal.
 
+# Requirement
+
+This tool is using sqlite3.
+Install sqlite3 If you have not installed yet.
+
 # Install
 
 You can install via cargo.
@@ -28,3 +33,7 @@ Options:
 
 First, you have to init the task manager.
 When you init the task manager, <home path>/.terminal_task_manager/tasks.db3 will be created.
+
+## Tips
+
+just put 'ttm'. It shows the task list.
