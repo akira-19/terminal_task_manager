@@ -1,7 +1,10 @@
 use clap::{Parser, Subcommand};
 use rusqlite::Connection;
 extern crate dirs;
-use std::{fs, path::PathBuf};
+use std::{error::Error, fs, path::PathBuf};
+
+const TASK_MANAGER_DIR: &str = ".terminal_task_manager";
+const DATABASE_FILE: &str = "tasks.db3";
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -9,8 +12,8 @@ struct Cli {
     #[arg(short, long, help = "Add a task")]
     add: Option<String>,
 
-    #[arg(short, long, help = "delete a task")]
-    delete: Option<String>,
+    #[arg(short, long, help = "Delete a task by id")]
+    delete: Option<i32>,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -18,124 +21,108 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    #[clap(visible_alias("i"), about = "initializes a task manager")]
+    #[clap(visible_alias("i"), about = "Initializes a task manager")]
     Init,
+
+    #[clap(visible_alias("l"), about = "Lists all tasks")]
+    List,
 }
 
-fn get_home_path() -> Result<PathBuf, String> {
-    if let Some(path) = dirs::home_dir() {
-        Ok(path)
-    } else {
-        Err("Cannot get home dir".to_string())
-    }
+fn get_home_path() -> Result<PathBuf, Box<dyn Error>> {
+    dirs::home_dir().ok_or_else(|| "Cannot get home dir".into())
 }
 
-fn create_dir(home_path: PathBuf) -> Result<PathBuf, String> {
-    let path = home_path.join(".terminal_task_manager");
-
-    match fs::create_dir_all(path.clone()) {
-        Err(_) => Err("Unable to create directory".to_string()),
-        Ok(_) => Ok(path),
-    }
+fn create_dir(home_path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    let path = home_path.join(TASK_MANAGER_DIR);
+    fs::create_dir_all(&path)?;
+    Ok(path)
 }
 
-fn create_file(path: PathBuf) -> Result<PathBuf, String> {
-    let path = path.join("tasks.db3");
-
-    match fs::File::create(path.clone()) {
-        Err(_) => Err("Unable to create file".to_string()),
-        Ok(_) => Ok(path),
-    }
+fn create_file(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+    let path = path.join(DATABASE_FILE);
+    fs::File::create(&path)?;
+    Ok(path)
 }
 
-fn init_dir() -> Result<PathBuf, String> {
+fn init_dir() -> Result<PathBuf, Box<dyn Error>> {
     let home_path = get_home_path()?;
-    let path = create_dir(home_path)?;
-    create_file(path)
+    let dir_path = create_dir(home_path)?;
+    create_file(dir_path)
 }
 
-fn init_task_table(conn: &Connection) -> Result<(), String> {
-    match conn.execute(
-        "CREATE TABLE tasks (
-            id    INTEGER PRIMARY KEY AUTOINCREMENT,
-            task  TEXT NOT NULL,
+fn init_task_table(conn: &Connection) -> Result<(), Box<dyn Error>> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT (DATETIME('now', 'localtime'))
         )",
         (),
-    ) {
-        Err(_) => Err("Unable to create table".to_string()),
-        Ok(_) => Ok(()),
-    }
+    )?;
+    Ok(())
 }
 
-fn add_task(conn: &Connection, task: String) -> Result<(), String> {
-    match conn.execute(
+fn add_task(conn: &Connection, task: String) -> Result<(), Box<dyn Error>> {
+    conn.execute(
         "INSERT INTO tasks (task) VALUES (?)",
         rusqlite::params![task],
-    ) {
-        Err(_) => Err("Unable to add task".to_string()),
-        Ok(_) => Ok(()),
-    }
+    )?;
+    Ok(())
 }
 
-fn delete_task(conn: &Connection, task: String) -> Result<(), String> {
-    match conn.execute("DELETE FROM tasks WHERE id = ?", rusqlite::params![task]) {
-        Err(_) => Err("Unable to delete task".to_string()),
-        Ok(_) => Ok(()),
-    }
+fn delete_task(conn: &Connection, task_id: i32) -> Result<(), Box<dyn Error>> {
+    conn.execute("DELETE FROM tasks WHERE id = ?", rusqlite::params![task_id])?;
+    Ok(())
 }
 
-fn list_tasks(conn: &Connection) -> Result<(), String> {
-    let mut stmt = match conn.prepare("SELECT id, task, created_at FROM tasks") {
-        Err(_) => return Err("Unable to prepare statement".to_string()),
-        Ok(stmt) => stmt,
-    };
-
-    let task_iter = match stmt.query_map([], |row| {
+fn list_tasks(conn: &Connection) -> Result<(), Box<dyn Error>> {
+    let mut stmt = conn.prepare("SELECT id, task, created_at FROM tasks")?;
+    let task_iter = stmt.query_map([], |row| {
         Ok(format!(
             "{}. {} - {}",
             row.get::<usize, i32>(0)?,
             row.get::<usize, String>(1)?,
             row.get::<usize, String>(2)?
         ))
-    }) {
-        Err(_) => return Err("Unable to query map".to_string()),
-        Ok(task_iter) => task_iter,
-    };
+    })?;
 
     for task in task_iter {
-        println!("{}", task.unwrap());
+        println!("{}", task?);
     }
 
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Some(Command::Init) => {
-            let path = init_dir().expect("Unable to create directory");
-            let conn = Connection::open(&path).unwrap();
-            init_task_table(&conn).expect("Unable to create table");
+            let path = init_dir()?;
+            let conn = Connection::open(&path)?;
+            init_task_table(&conn)?;
             println!("Initialized task manager");
-            return;
+            return Ok(());
+        }
+        Some(Command::List) => {
+            let path = get_home_path()?.join(TASK_MANAGER_DIR).join(DATABASE_FILE);
+            let conn = Connection::open(&path)?;
+            list_tasks(&conn)?;
+            return Ok(());
         }
         None => {}
     }
 
-    let path = get_home_path().expect("Unable to get home dir");
-    let path = path.join(".terminal_task_manager");
-    let path = path.join("tasks.db3");
-    let conn = Connection::open(&path).unwrap();
+    let path = get_home_path()?.join(TASK_MANAGER_DIR).join(DATABASE_FILE);
+    let conn = Connection::open(&path)?;
 
-    if let Some(v) = cli.add {
-        add_task(&conn, v).expect("Unable to add task");
+    if let Some(task) = cli.add {
+        add_task(&conn, task)?;
     }
 
-    if let Some(v) = cli.delete {
-        delete_task(&conn, v).expect("Unable to delete task");
+    if let Some(task_id) = cli.delete {
+        delete_task(&conn, task_id)?;
     }
 
-    list_tasks(&conn).expect("Unable to list tasks");
+    Ok(())
 }
