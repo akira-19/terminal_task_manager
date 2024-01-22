@@ -1,9 +1,15 @@
 [package]
-name = "terminal_task_manager"
+name = "ttm"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Task Manager by CLI"
+readme = "README.md"
+homepage = "https://github.com/akira-19/terminal_task_manager"
+repository = "https://github.com/akira-19/terminal_task_manager"
+keywords = ["cli", "Rust"]
+categories = ["command-line-utilities"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = { version = "4.4.18", features = ["derive"] }
