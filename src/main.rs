@@ -23,9 +23,6 @@ struct Cli {
 enum Command {
     #[clap(visible_alias("i"), about = "Initializes a task manager")]
     Init,
-
-    #[clap(visible_alias("l"), about = "Lists all tasks")]
-    List,
 }
 
 fn get_home_path() -> Result<PathBuf, Box<dyn Error>> {
@@ -34,13 +31,17 @@ fn get_home_path() -> Result<PathBuf, Box<dyn Error>> {
 
 fn create_dir(home_path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
     let path = home_path.join(TASK_MANAGER_DIR);
-    fs::create_dir_all(&path)?;
+    if !path.exists() {
+        fs::create_dir_all(&path)?;
+    }
     Ok(path)
 }
 
 fn create_file(path: PathBuf) -> Result<PathBuf, Box<dyn Error>> {
     let path = path.join(DATABASE_FILE);
-    fs::File::create(&path)?;
+    if !path.exists() {
+        fs::File::create(&path)?;
+    }
     Ok(path)
 }
 
@@ -104,12 +105,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("Initialized task manager");
             return Ok(());
         }
-        Some(Command::List) => {
-            let path = get_home_path()?.join(TASK_MANAGER_DIR).join(DATABASE_FILE);
-            let conn = Connection::open(&path)?;
-            list_tasks(&conn)?;
-            return Ok(());
-        }
         None => {}
     }
 
@@ -123,6 +118,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(task_id) = cli.delete {
         delete_task(&conn, task_id)?;
     }
+
+    list_tasks(&conn)?;
 
     Ok(())
 }
