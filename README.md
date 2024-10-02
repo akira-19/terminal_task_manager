@@ -9,7 +9,7 @@ Install sqlite3 If you have not installed yet.
 
 # Install
 
-You can install via cargo.
+You can install this tool via cargo.
 
 ```
 cargo install ttm
